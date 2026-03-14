@@ -9,6 +9,7 @@
 class SimulationScheduler {
 public:
     SimulationScheduler();
+    ~SimulationScheduler();
     void add(std::string sandPandaArgs, std::string id, int threads_number);
 
     void startSimulation();

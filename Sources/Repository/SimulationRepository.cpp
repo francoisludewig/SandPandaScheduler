@@ -37,6 +37,7 @@ void SimulationRepository::isCompleted(const Simulation& simulation) {
         running.erase(it);
     }
     completed.push_back(simulation);
+    save();
 }
 
 void SimulationRepository::cleanCompleted() {
