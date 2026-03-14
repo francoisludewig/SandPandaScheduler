@@ -23,18 +23,33 @@ Simulation SimulationRepository::getNext() {
     return simulation;
 }
 
+int SimulationRepository::get_number_threads_for_next() const {
+        return pending.begin()->second.get_threads_number();
+}
+
 void SimulationRepository::isRunning(const Simulation &simulation) {
     running.push_back(simulation);
 }
 
 void SimulationRepository::isCompleted(const Simulation& simulation) {
-    running.erase(std::ranges::remove(running, simulation).begin(), running.end());
+    auto it = std::find(running.begin(), running.end(), simulation);
+    if (it != running.end()) {
+        running.erase(it);
+    }
     completed.push_back(simulation);
 }
 
 void SimulationRepository::cleanCompleted() {
     completed.clear();
     save();
+}
+
+int SimulationRepository::number_of_threads_used() const {
+    int number_of_threads = 0;
+    for (const auto& runningSimulation : running) {
+        number_of_threads += runningSimulation.get_threads_number();
+    }
+    return number_of_threads;
 }
 
 std::filesystem::path SimulationRepository::getConfigFilePath()
@@ -48,33 +63,42 @@ void SimulationRepository::save() const
     std::filesystem::create_directories(configFilePath.parent_path());
 
     nlohmann::json jsonData;
-    for (const auto& simulation : pending) {
-        jsonData["pending"].push_back({
-            {"id", simulation.first},
-            {"sandPandaArgs", simulation.second.get_sandPandaArgs()},
-            {"threads_number", simulation.second.get_threads_number()}
-        });
+    if (!pending.empty()) {
+        for (const auto& simulation : pending) {
+            jsonData["pending"].push_back({
+                {"id", simulation.first},
+                {"sandPandaArgs", simulation.second.get_sandPandaArgs()},
+                {"threads_number", simulation.second.get_threads_number()}
+            });
+        }
     }
-    for (const auto& simulation : running) {
-        jsonData["running"].push_back({
-            {"id", simulation.get_id()},
-            {"pid", simulation.get_pid()},
-            {"sandPandaArgs", simulation.get_sandPandaArgs()},
-            {"threads_number", simulation.get_threads_number()}
-        });
-    }
-    for (const auto& simulation : completed) {
-        jsonData["completed"].push_back({
+    if (!running.empty()) {
+        for (const auto& simulation : running) {
+            jsonData["running"].push_back({
                 {"id", simulation.get_id()},
                 {"pid", simulation.get_pid()},
-            {"sandPandaArgs", simulation.get_sandPandaArgs()},
-            {"threads_number", simulation.get_threads_number()}
-        });
+                {"sandPandaArgs", simulation.get_sandPandaArgs()},
+                {"threads_number", simulation.get_threads_number()}
+            });
+        }
     }
+    //TODO Comprendre pourquoi cette collection pose problème ! Elle n'est pas essentielle on plus !
+    /*
+    if (!completed.empty()) {
+        for (const auto& simulation : completed) {
+            jsonData["completed"].push_back({
+                    {"id", simulation.get_id()},
+                    {"pid", simulation.get_pid()},
+                {"sandPandaArgs", simulation.get_sandPandaArgs()},
+                {"threads_number", simulation.get_threads_number()}
+            });
+        }
+    }
+    */
     jsonData["next_id"] = next_id;
     jsonData["max_number_threads"] = max_number_threads;
 
-    std::ofstream configFile(configFilePath);
+    std::ofstream configFile(configFilePath, std::ios::trunc);
     configFile << jsonData.dump(4);
 }
 
@@ -101,7 +125,7 @@ void SimulationRepository::load()
         for (const auto& runningSimulation : jsonData["running"]) {
             running.emplace_back(
                 runningSimulation["sandPandaArgs"].get<std::string>(),
-                std::to_string(runningSimulation["id"].get<int32_t>()),
+                runningSimulation["id"].get<std::string>(),
                 runningSimulation["threads_number"].get<int>(),
                 runningSimulation["pid"].get<int>()
             );
@@ -109,7 +133,7 @@ void SimulationRepository::load()
         for (const auto& completedSimulation : jsonData["completed"]) {
             completed.emplace_back(
                 completedSimulation["sandPandaArgs"].get<std::string>(),
-                std::to_string(completedSimulation["id"].get<int32_t>()),
+                completedSimulation["id"].get<std::string>(),
                 completedSimulation["threads_number"].get<int>(),
                 completedSimulation["pid"].get<int>()
             );
