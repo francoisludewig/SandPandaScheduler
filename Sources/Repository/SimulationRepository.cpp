@@ -67,7 +67,8 @@ void SimulationRepository::save() const
     if (!pending.empty()) {
         for (const auto& simulation : pending) {
             jsonData["pending"].push_back({
-                {"id", simulation.first},
+                {"priority", simulation.first},
+                   {"id", simulation.second.get_id()},
                 {"sandPandaArgs", simulation.second.get_sandPandaArgs()},
                 {"threads_number", simulation.second.get_threads_number()}
             });
@@ -117,9 +118,9 @@ void SimulationRepository::load()
         completed.clear();
 
         for (const auto& pendingSimulation : jsonData["pending"]) {
-            pending.emplace(pendingSimulation["id"].get<int32_t>(), Simulation{
+            pending.emplace(pendingSimulation["priority"].get<int32_t>(), Simulation{
                 pendingSimulation["sandPandaArgs"].get<std::string>(),
-                std::to_string(pendingSimulation["id"].get<int32_t>()),
+                pendingSimulation["id"].get<std::string>(),
                 pendingSimulation["threads_number"].get<int>()
             });
         }
