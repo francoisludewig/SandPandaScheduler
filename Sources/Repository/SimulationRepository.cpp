@@ -97,7 +97,7 @@ void SimulationRepository::save() const
         }
     }
     */
-    jsonData["next_id"] = next_id;
+    jsonData["next_priotiry"] = next_id;
     jsonData["max_number_threads"] = max_number_threads;
 
     std::ofstream configFile(configFilePath, std::ios::trunc);
@@ -141,7 +141,7 @@ void SimulationRepository::load()
             );
         }
 
-        next_id = jsonData["next_id"].get<int32_t>();
+        next_id = jsonData["next_priotiry"].get<int32_t>();
         max_number_threads = jsonData["max_number_threads"].get<int32_t>();
     }
 }
