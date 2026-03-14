@@ -75,7 +75,7 @@ void SimulationScheduler::startSimulation() {
                 sandPandaArgs.data());
 
         printf("%s\n", command);
-        system(command);
+        int result = system(command);
 
         // Récupération du nouveau PID
         auto pids = getSandPandaPids();
@@ -118,17 +118,18 @@ void SimulationScheduler::startSimulation() {
 bool isRunning(std::string id)
 {
     char command[1024];
+    int result;
     bool isAlive = true;
     sprintf(command,
             "pgrep -f \"%s\" >> /home/ludfr/.config/SandPandaScheduler/alive.txt",
             id.data());
-    system(command);
+    result = system(command);
 
     if (std::filesystem::file_size("/home/ludfr/.config/SandPandaScheduler/alive.txt") < 16)
         isAlive = false;
 
     sprintf(command, "rm /home/ludfr/.config/SandPandaScheduler/alive.txt");
-    system(command);
+    result = system(command);
     return isAlive;
 }
 
@@ -167,4 +168,7 @@ void SimulationScheduler::clean() {
 
 void SimulationScheduler::update_max_number_threads(const int newValue) {
     simulationRepository.set_max_number_threads(newValue);
+    syslog(LOG_INFO,
+           "Modification du nombre de thread manager par le scheduler : nouvelle valeur = %d",
+           newValue);
 }
