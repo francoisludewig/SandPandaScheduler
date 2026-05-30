@@ -142,6 +142,9 @@ bool isProcessRunning(pid_t pid) {
 void SimulationScheduler::scheduleSimulations() {
     bool isSimulationCompleted = false;
 
+    if (simulationRepository.getRunning().empty())
+        startSimulation();
+
     for (const auto& running = simulationRepository.getRunning(); auto& simulation : running) {
         if (!isProcessRunning(simulation.get_pid())) {
 
