@@ -15,6 +15,10 @@ public:
     void startSimulation();
     void scheduleSimulations();
     void clean();
+    void flushPending();
+    void stopRunning();
+    void resetPriority();
+    void status();
     void update_max_number_threads(int newValue);
 
 private:
