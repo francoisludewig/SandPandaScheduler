@@ -52,6 +52,15 @@ int SimulationRepository::clearPending() {
     return count;
 }
 
+// Remet le compteur de priorite a 1. Si des simulations sont encore en attente, le compteur
+// repart juste apres la derniere d'entre elles : add() ecrase sinon une simulation en attente
+// qui aurait deja cette priorite.
+int SimulationRepository::resetPriority() {
+    next_id = pending.empty() ? 1 : pending.rbegin()->first + 1;
+    save();
+    return next_id;
+}
+
 int SimulationRepository::number_of_threads_used() const {
     int number_of_threads = 0;
     for (const auto& runningSimulation : running) {

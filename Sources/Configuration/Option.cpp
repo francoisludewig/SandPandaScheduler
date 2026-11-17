@@ -20,6 +20,8 @@ int Option::Management(char **argv, const int argc) noexcept {
 						printf("\t-numberThreads allow to set the maximum number of thread managed by the scheduler\n");
 						printf("\t-flushPending remove all pending simulations\n");
 						printf("\t-stopRunning stop all running simulations (SIGTERM, then SIGKILL after 10 s)\n");
+						printf("\t-resetPriority reset the priority counter to 1 (or just after the last pending simulation)\n");
+						printf("\t-reset full reset : -stopRunning, -clean and -resetPriority (pending simulations are kept)\n");
 						return 0;
 					}
 					if(!strcmp(argv[i], "-h")){
@@ -30,6 +32,8 @@ int Option::Management(char **argv, const int argc) noexcept {
 						printf("\t-numberThreads allow to set the maximum number of thread managed by the scheduler\n");
 						printf("\t-flushPending remove all pending simulations\n");
 						printf("\t-stopRunning stop all running simulations (SIGTERM, then SIGKILL after 10 s)\n");
+						printf("\t-resetPriority reset the priority counter to 1 (or just after the last pending simulation)\n");
+						printf("\t-reset full reset : -stopRunning, -clean and -resetPriority (pending simulations are kept)\n");
 						return 0;
 					}
 					break;
@@ -65,6 +69,18 @@ int Option::Management(char **argv, const int argc) noexcept {
 					if(!strcmp(argv[i], "-flushPending")){
 						printf("flush pending\n");
 						flushPending = true;
+					}
+					break;
+				case 'r':
+					if(!strcmp(argv[i], "-resetPriority")){
+						printf("reset priority\n");
+						resetPriority = true;
+					}
+					if(!strcmp(argv[i], "-reset")){
+						printf("reset : stop running, clean, reset priority\n");
+						stopRunning = true;
+						clean = true;
+						resetPriority = true;
 					}
 					break;
 				case 'c':

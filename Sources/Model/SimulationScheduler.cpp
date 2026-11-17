@@ -242,6 +242,15 @@ void SimulationScheduler::stopRunning() {
     simulationRepository.save();
 }
 
+void SimulationScheduler::resetPriority() {
+    const int next = simulationRepository.resetPriority();
+    if (next == 1)
+        printf("Compteur de priorite remis a 1\n");
+    else
+        printf("Simulations encore en attente : le compteur de priorite repart a %d\n", next);
+    syslog(LOG_INFO, "Reset du compteur de priorite | prochaine priorite=%d", next);
+}
+
 void SimulationScheduler::clean() {
     simulationRepository.cleanCompleted();
 }

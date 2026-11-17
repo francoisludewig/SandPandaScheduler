@@ -17,6 +17,7 @@ public:
     void clean();
     void flushPending();
     void stopRunning();
+    void resetPriority();
     void update_max_number_threads(int newValue);
 
 private:

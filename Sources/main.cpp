@@ -27,8 +27,13 @@ int main(const int argc,char **argv){
 		simulation_scheduler.scheduleSimulations();
 	}
 
+	// Apres -stopRunning : les simulations arretees sont passees en "completed" et sont nettoyees ici
 	if (opt.clean) {
 		simulation_scheduler.clean();
+	}
+
+	if (opt.resetPriority) {
+		simulation_scheduler.resetPriority();
 	}
 
 	if (opt.change_numberThreads) {

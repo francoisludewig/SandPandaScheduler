@@ -18,6 +18,7 @@ public:
     void isCompleted(const Simulation& simulation);
     void cleanCompleted();
     int clearPending();
+    int resetPriority();
     int number_of_threads_used() const;
 
     std::vector<Simulation>& getRunning() {return running;}
