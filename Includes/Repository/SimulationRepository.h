@@ -17,6 +17,7 @@ public:
     void isRunning(const Simulation& simulation);
     void isCompleted(const Simulation& simulation);
     void cleanCompleted();
+    int clearPending();
     int number_of_threads_used() const;
 
     std::vector<Simulation>& getRunning() {return running;}

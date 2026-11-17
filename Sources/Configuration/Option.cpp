@@ -18,6 +18,8 @@ int Option::Management(char **argv, const int argc) noexcept {
 						printf("\t-schedule start analyse of running simulations and start new one if resources are available\n");
 						printf("\t-clean remove terminated simulations from history\n");
 						printf("\t-numberThreads allow to set the maximum number of thread managed by the scheduler\n");
+						printf("\t-flushPending remove all pending simulations\n");
+						printf("\t-stopRunning stop all running simulations (SIGTERM, then SIGKILL after 10 s)\n");
 						return 0;
 					}
 					if(!strcmp(argv[i], "-h")){
@@ -26,6 +28,8 @@ int Option::Management(char **argv, const int argc) noexcept {
 						printf("\t-schedule start analyse of running simulations and start new one if resources are available\n");
 						printf("\t-clean remove terminated simulations from history\n");
 						printf("\t-numberThreads allow to set the maximum number of thread managed by the scheduler\n");
+						printf("\t-flushPending remove all pending simulations\n");
+						printf("\t-stopRunning stop all running simulations (SIGTERM, then SIGKILL after 10 s)\n");
 						return 0;
 					}
 					break;
@@ -51,6 +55,16 @@ int Option::Management(char **argv, const int argc) noexcept {
 					if(!strcmp(argv[i], "-schedule")){
 						printf("schedule\n");
 						schedule = true;
+					}
+					if(!strcmp(argv[i], "-stopRunning")){
+						printf("stop running\n");
+						stopRunning = true;
+					}
+					break;
+				case 'f':
+					if(!strcmp(argv[i], "-flushPending")){
+						printf("flush pending\n");
+						flushPending = true;
 					}
 					break;
 				case 'c':

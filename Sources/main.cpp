@@ -9,6 +9,16 @@ int main(const int argc,char **argv){
 	if(opt.Management(argv,argc) == 0)
 		return 0;
 
+	// Vider la file d'attente avant d'arreter les simulations en cours : sinon un "-schedule"
+	// (ou le prochain passage du cron) relancerait aussitot les simulations en attente.
+	if (opt.flushPending) {
+		simulation_scheduler.flushPending();
+	}
+
+	if (opt.stopRunning) {
+		simulation_scheduler.stopRunning();
+	}
+
 	if (opt.add) {
 		simulation_scheduler.add(opt.sand_panda_args(), opt.id1(), opt.threads_number1());
 	}

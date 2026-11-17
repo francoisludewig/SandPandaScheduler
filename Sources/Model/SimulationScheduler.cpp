@@ -10,6 +10,8 @@
 #include <csignal>
 #include <fstream>
 #include <unistd.h>
+#include <filesystem>
+#include <string>
 
 #include "../../Includes/Model/Simulation.h"
 
@@ -160,6 +162,84 @@ void SimulationScheduler::scheduleSimulations() {
 
     if (isSimulationCompleted)
         scheduleSimulations();
+}
+
+void SimulationScheduler::flushPending() {
+    const int count = simulationRepository.clearPending();
+    printf("%d simulation(s) en attente supprimee(s)\n", count);
+    syslog(LOG_INFO, "Suppression des simulations en attente | nombre=%d", count);
+}
+
+// Verifie que le PID designe bien un processus SandPanda (un PID peut etre reutilise
+// par un autre programme apres la fin de la simulation). Sous Linux on lit /proc/<pid>/comm ;
+// si /proc n'est pas disponible, on ne peut pas verifier et on fait confiance au PID.
+static bool isSandPandaProcess(const pid_t pid) {
+    const std::filesystem::path comm = std::filesystem::path("/proc") / std::to_string(pid) / "comm";
+    if (!std::filesystem::exists("/proc/self"))
+        return true;
+    std::ifstream file(comm);
+    std::string name;
+    if (!file || !std::getline(file, name))
+        return false;
+    return name == "SandPanda";
+}
+
+// Attend la fin du processus pendant au plus timeoutMs millisecondes
+static bool waitForExit(const pid_t pid, const int timeoutMs) {
+    for (int waited = 0; waited < timeoutMs; waited += 100) {
+        if (!isProcessRunning(pid))
+            return true;
+        usleep(100 * 1000);
+    }
+    return !isProcessRunning(pid);
+}
+
+void SimulationScheduler::stopRunning() {
+    // Copie : isCompleted() retire les simulations de la liste en cours
+    const std::vector<Simulation> running = simulationRepository.getRunning();
+    if (running.empty()) {
+        printf("Aucune simulation en cours\n");
+        return;
+    }
+
+    for (const auto &simulation: running) {
+        const pid_t pid = simulation.get_pid();
+        const std::string idString = simulation.get_id();  // get_id() renvoie une copie
+        const char *id = idString.c_str();
+
+        if (pid <= 0) {
+            // PID inconnu : impossible d'arreter le processus sans risque, on le laisse
+            printf("Simulation %s : PID inconnu, arret impossible\n", id);
+            syslog(LOG_WARNING, "Arret impossible, PID inconnu | id=%s", id);
+            continue;
+        }
+
+        if (!isProcessRunning(pid) || !isSandPandaProcess(pid)) {
+            printf("Simulation %s (pid %d) deja terminee\n", id, static_cast<int>(pid));
+            syslog(LOG_INFO, "Simulation deja terminee lors de l'arret | id=%s | pid=%d", id,
+                   static_cast<int>(pid));
+            simulationRepository.isCompleted(simulation);
+            continue;
+        }
+
+        // Arret propre (SIGTERM), puis force (SIGKILL) si le processus ne s'arrete pas
+        kill(pid, SIGTERM);
+        bool stopped = waitForExit(pid, 10000);
+        if (!stopped) {
+            kill(pid, SIGKILL);
+            stopped = waitForExit(pid, 5000);
+        }
+
+        if (stopped) {
+            printf("Simulation %s (pid %d) arretee\n", id, static_cast<int>(pid));
+            syslog(LOG_INFO, "Simulation arretee | id=%s | pid=%d", id, static_cast<int>(pid));
+            simulationRepository.isCompleted(simulation);
+        } else {
+            printf("Simulation %s (pid %d) : echec de l'arret\n", id, static_cast<int>(pid));
+            syslog(LOG_ERR, "Echec de l'arret de la simulation | id=%s | pid=%d", id, static_cast<int>(pid));
+        }
+    }
+    simulationRepository.save();
 }
 
 void SimulationScheduler::clean() {

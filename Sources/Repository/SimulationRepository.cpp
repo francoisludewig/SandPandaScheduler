@@ -45,6 +45,13 @@ void SimulationRepository::cleanCompleted() {
     save();
 }
 
+int SimulationRepository::clearPending() {
+    const int count = static_cast<int>(pending.size());
+    pending.clear();
+    save();
+    return count;
+}
+
 int SimulationRepository::number_of_threads_used() const {
     int number_of_threads = 0;
     for (const auto& runningSimulation : running) {
