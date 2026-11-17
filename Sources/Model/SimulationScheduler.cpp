@@ -2,11 +2,13 @@
 // Created by ludfr on 07/03/2026.
 //
 
+#include <algorithm>
 #include <utility>
 #include <syslog.h>   // ← Ajout pour SysLog
 
 #include "../../Includes/Model/SimulationScheduler.h"
 
+#include <cerrno>
 #include <csignal>
 #include <fstream>
 #include <unistd.h>
@@ -39,6 +41,23 @@ void SimulationScheduler::add(std::string sandPandaArgs, std::string id, const i
     startSimulation();
 }
 
+// Un processus termine mais pas encore recupere par son parent (zombie, etat 'Z') repond encore
+// a kill(pid, 0) : on lit son etat dans /proc/<pid>/stat (Linux) pour ne pas le croire actif.
+bool isProcessRunning(pid_t pid) {
+    if (pid <= 0)
+        return false;   // kill(-1, 0) viserait tous les processus et reussirait toujours
+    if (kill(pid, 0) != 0 && errno != EPERM)
+        return false;
+    std::ifstream stat("/proc/" + std::to_string(pid) + "/stat");
+    std::string line;
+    if (stat && std::getline(stat, line)) {
+        const auto close = line.rfind(')');   // le nom du programme peut contenir des espaces
+        if (close != std::string::npos && close + 2 < line.size() && line[close + 2] == 'Z')
+            return false;
+    }
+    return true;
+}
+
 std::vector<pid_t> getSandPandaPids()
 {
     std::vector<pid_t> pids;
@@ -56,7 +75,8 @@ std::vector<pid_t> getSandPandaPids()
     {
         try {
             pid_t pid = static_cast<pid_t>(std::stol(buffer));
-            pids.push_back(pid);
+            if (isProcessRunning(pid))   // ignore les processus termines (zombies)
+                pids.push_back(pid);
         } catch (...) {}
     }
 
@@ -76,35 +96,47 @@ void SimulationScheduler::startSimulation() {
                 simulation.get_threads_number(),
                 sandPandaArgs.data());
 
-        printf("%s\n", command);
+        printf("Demarrage de %s (%d thread(s)) : %s\n", simulation.get_id().c_str(),
+               simulation.get_threads_number(), command);
+        // PID des SandPanda deja presents (suivis ou non, p. ex. lances a la main) : le nouveau
+        // PID est celui qui apparait apres le lancement
+        const auto pidsBefore = getSandPandaPids();
         int result = system(command);
 
-        // Récupération du nouveau PID
-        auto pids = getSandPandaPids();
+        // Récupération du nouveau PID (le processus peut mettre un instant a apparaitre :
+        // on reessaie pendant 2 s au maximum)
         bool isNewPID = false;
-        for (auto& pid : pids) {
-            isNewPID = true;
-            for (auto& simu : simulationRepository.getRunning()) {
-                if (simu.get_pid() == pid) {
-                    isNewPID = false;
+        for (int attempt = 0; attempt < 20 && !isNewPID; attempt++) {
+            if (attempt > 0)
+                usleep(100 * 1000);
+            auto pids = getSandPandaPids();
+            for (auto& pid : pids) {
+                isNewPID = std::find(pidsBefore.begin(), pidsBefore.end(), pid) == pidsBefore.end();
+                for (auto& simu : simulationRepository.getRunning()) {
+                    if (simu.get_pid() == pid) {
+                        isNewPID = false;
+                        break;
+                    }
+                }
+                if (isNewPID) {
+                    simulation.setId(pid);
+                    printf("  -> %s demarree, pid %d\n", simulation.get_id().c_str(), static_cast<int>(pid));
+
+                    // ── Log : démarrage effectif avec PID résolu ──────────────────
+                    syslog(LOG_INFO,
+                           "Démarrage simulation | id=%s | pid=%d | threads=%d | args=%s",
+                           simulation.get_id().c_str(),
+                           static_cast<int>(pid),
+                           simulation.get_threads_number(),
+                           sandPandaArgs.c_str());
                     break;
                 }
-            }
-            if (isNewPID) {
-                simulation.setId(pid);
-
-                // ── Log : démarrage effectif avec PID résolu ──────────────────
-                syslog(LOG_INFO,
-                       "Démarrage simulation | id=%s | pid=%d | threads=%d | args=%s",
-                       simulation.get_id().c_str(),
-                       static_cast<int>(pid),
-                       simulation.get_threads_number(),
-                       sandPandaArgs.c_str());
-                break;
             }
         }
 
         if (!isNewPID) {
+            printf("  /!\\ ALERTE : PID introuvable pour %s, simulation placee en erreur\n",
+                   simulation.get_id().c_str());
             // ── Log : avertissement si le PID n'a pas pu être résolu ──────────
             syslog(LOG_WARNING,
                    "Simulation démarrée mais PID introuvable | id=%s | args=%s",
@@ -112,8 +144,18 @@ void SimulationScheduler::startSimulation() {
                    sandPandaArgs.c_str());
         }
 
-        simulationRepository.isRunning(simulation);
+        if (isNewPID)
+            simulationRepository.isRunning(simulation);
+        else
+            simulationRepository.isError(simulation);
         simulationRepository.save();
+    }
+
+    if (simulationRepository.isPending()) {
+        const auto &next = simulationRepository.getPending().begin()->second;
+        printf("En attente : %s demande %d thread(s), %d libre(s) sur %d\n", next.get_id().c_str(),
+               next.get_threads_number(), simulationRepository.get_number_threads_free(),
+               simulationRepository.get_max_number_threads());
     }
 }
 
@@ -135,17 +177,26 @@ bool isRunning(std::string id)
     return isAlive;
 }
 
-bool isProcessRunning(pid_t pid) {
-    if (kill(pid, 0) == 0)
-        return true;
-    return errno == EPERM;
-}
+
 
 void SimulationScheduler::scheduleSimulations() {
-    bool isSimulationCompleted = false;
+    // Copie : isCompleted() retire les simulations terminees de la liste en cours
+    const std::vector<Simulation> running = simulationRepository.getRunning();
+    printf("Verification de %zu simulation(s) en cours\n", running.size());
 
-    for (const auto& running = simulationRepository.getRunning(); auto& simulation : running) {
+    int completedCount = 0;
+    for (const auto &simulation: running) {
+        if (simulation.get_pid() <= 0) {
+            // Ancienne entree sans PID : impossible a suivre, elle bloquerait ses threads indefiniment
+            printf("/!\\ ALERTE : %s n'a pas de PID connu, simulation placee en erreur\n",
+                   simulation.get_id().c_str());
+            syslog(LOG_WARNING, "Simulation sans PID placee en erreur | id=%s", simulation.get_id().c_str());
+            simulationRepository.isError(simulation);
+            continue;
+        }
         if (!isProcessRunning(simulation.get_pid())) {
+            printf("Fin detectee : %s (pid %d)\n", simulation.get_id().c_str(),
+                   static_cast<int>(simulation.get_pid()));
 
             // ── Log : détection de fin de simulation ──────────────────────────
             syslog(LOG_INFO,
@@ -154,14 +205,28 @@ void SimulationScheduler::scheduleSimulations() {
                    static_cast<int>(simulation.get_pid()));
 
             simulationRepository.isCompleted(simulation);
-            startSimulation();
-            isSimulationCompleted = true;
-            break;
+            completedCount++;
+        } else {
+            printf("Toujours en cours : %s (pid %d)\n", simulation.get_id().c_str(),
+                   static_cast<int>(simulation.get_pid()));
         }
     }
 
-    if (isSimulationCompleted)
-        scheduleSimulations();
+    // Lancement des simulations en attente tant que des threads sont libres
+    // (y compris si des threads ont ete liberes autrement : -stopRunning, -numberThreads)
+    const size_t runningBefore = simulationRepository.getRunning().size();
+    const size_t errorsBefore = simulationRepository.getErrors().size();
+    if (simulationRepository.isPending())
+        startSimulation();
+    else
+        printf("Aucune simulation en attente\n");
+    const size_t startedCount = simulationRepository.getRunning().size() - runningBefore;
+    const size_t failedCount = simulationRepository.getErrors().size() - errorsBefore;
+
+    printf("Bilan : %d terminee(s), %zu demarree(s), %zu en erreur, %zu en cours, %zu en attente, %d/%d threads utilises\n",
+           completedCount, startedCount, failedCount, simulationRepository.getRunning().size(),
+           simulationRepository.getPending().size(), simulationRepository.number_of_threads_used(),
+           simulationRepository.get_max_number_threads());
 }
 
 void SimulationScheduler::flushPending() {
@@ -249,6 +314,42 @@ void SimulationScheduler::resetPriority() {
     else
         printf("Simulations encore en attente : le compteur de priorite repart a %d\n", next);
     syslog(LOG_INFO, "Reset du compteur de priorite | prochaine priorite=%d", next);
+}
+
+void SimulationScheduler::status() {
+    const int used = simulationRepository.number_of_threads_used();
+    const int max = simulationRepository.get_max_number_threads();
+    printf("=== SandPandaScheduler : statut ===\n");
+    printf("Threads            : %d utilise(s) / %d (%d libre(s))\n", used, max, max - used);
+    printf("Prochaine priorite : %d\n", simulationRepository.get_next_priority());
+
+    const auto &running = simulationRepository.getRunning();
+    printf("\nEn cours (%zu)\n", running.size());
+    if (!running.empty())
+        printf("  %-20s %8s %8s  %-10s %s\n", "id", "pid", "threads", "etat", "arguments");
+    for (const auto &simulation: running) {
+        const pid_t pid = simulation.get_pid();
+        const char *state = pid <= 0 ? "PID ?" : (isProcessRunning(pid) && isSandPandaProcess(pid)) ? "actif" : "termine";
+        printf("  %-20s %8d %8d  %-10s %s\n", simulation.get_id().c_str(), static_cast<int>(pid),
+               simulation.get_threads_number(), state, simulation.get_sandPandaArgs().c_str());
+    }
+
+    const auto &pending = simulationRepository.getPending();
+    printf("\nEn attente (%zu)\n", pending.size());
+    if (!pending.empty())
+        printf("  %-9s %-20s %8s  %s\n", "priorite", "id", "threads", "arguments");
+    for (const auto &[priority, simulation]: pending) {
+        printf("  %-9d %-20s %8d  %s\n", priority, simulation.get_id().c_str(), simulation.get_threads_number(),
+               simulation.get_sandPandaArgs().c_str());
+    }
+    const auto &errors = simulationRepository.getErrors();
+    if (!errors.empty()) {
+        printf("\n/!\\ En erreur, PID introuvable (%zu) - supprimees par -clean\n", errors.size());
+        printf("  %-20s %8s  %s\n", "id", "threads", "arguments");
+        for (const auto &simulation: errors)
+            printf("  %-20s %8d  %s\n", simulation.get_id().c_str(), simulation.get_threads_number(),
+                   simulation.get_sandPandaArgs().c_str());
+    }
 }
 
 void SimulationScheduler::clean() {

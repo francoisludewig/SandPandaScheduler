@@ -40,6 +40,11 @@ int main(const int argc,char **argv){
 		simulation_scheduler.update_max_number_threads(opt.number_threads());
 	}
 
+	// En dernier : affiche l'etat apres les autres actions de la commande
+	if (opt.status) {
+		simulation_scheduler.status();
+	}
+
 	/* TODO
 	 * (i) Le programme reçoit le script à lancer ou le créé sur base des arguments de simulations + prévoir la variable d'environnement pour le nombre de thread OpenMP
 	 * (ii) Proposer une option pour lancer le post traitement après la simulation (dans le script si généré par le programme)

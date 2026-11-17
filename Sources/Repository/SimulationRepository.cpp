@@ -40,8 +40,19 @@ void SimulationRepository::isCompleted(const Simulation& simulation) {
     save();
 }
 
+// Simulation en erreur (PID introuvable) : retiree de la liste en cours si elle y est
+void SimulationRepository::isError(const Simulation& simulation) {
+    auto it = std::find(running.begin(), running.end(), simulation);
+    if (it != running.end()) {
+        running.erase(it);
+    }
+    errors.push_back(simulation);
+    save();
+}
+
 void SimulationRepository::cleanCompleted() {
     completed.clear();
+    errors.clear();
     save();
 }
 
@@ -100,6 +111,16 @@ void SimulationRepository::save() const
             });
         }
     }
+    if (!errors.empty()) {
+        for (const auto& simulation : errors) {
+            jsonData["error"].push_back({
+                {"id", simulation.get_id()},
+                {"pid", simulation.get_pid()},
+                {"sandPandaArgs", simulation.get_sandPandaArgs()},
+                {"threads_number", simulation.get_threads_number()}
+            });
+        }
+    }
     //TODO Comprendre pourquoi cette collection pose problème ! Elle n'est pas essentielle on plus !
     /*
     if (!completed.empty()) {
@@ -132,6 +153,7 @@ void SimulationRepository::load()
         pending.clear();
         running.clear();
         completed.clear();
+        errors.clear();
 
         for (const auto& pendingSimulation : jsonData["pending"]) {
             pending.emplace(pendingSimulation["priority"].get<int32_t>(), Simulation{
@@ -155,6 +177,17 @@ void SimulationRepository::load()
                 completedSimulation["threads_number"].get<int>(),
                 completedSimulation["pid"].get<int>()
             );
+        }
+
+        if (jsonData.contains("error")) {
+            for (const auto& errorSimulation : jsonData["error"]) {
+                errors.emplace_back(
+                    errorSimulation["sandPandaArgs"].get<std::string>(),
+                    errorSimulation["id"].get<std::string>(),
+                    errorSimulation["threads_number"].get<int>(),
+                    errorSimulation["pid"].get<int>()
+                );
+            }
         }
 
         next_id = jsonData["next_priotiry"].get<int32_t>();

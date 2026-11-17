@@ -30,7 +30,7 @@ private:
 	int numberThreads = -1;
 public:
 	bool add = false, clean = false, schedule = false, change_numberThreads = false;
-	bool flushPending = false, stopRunning = false, resetPriority = false;
+	bool flushPending = false, stopRunning = false, resetPriority = false, status = false;
 	Option() noexcept;
 	int Management(char **argv, int argc) noexcept;
 };

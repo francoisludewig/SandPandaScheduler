@@ -16,12 +16,17 @@ public:
     int get_number_threads_for_next() const;
     void isRunning(const Simulation& simulation);
     void isCompleted(const Simulation& simulation);
+    void isError(const Simulation& simulation);
     void cleanCompleted();
     int clearPending();
     int resetPriority();
     int number_of_threads_used() const;
 
     std::vector<Simulation>& getRunning() {return running;}
+    [[nodiscard]] const std::map<int32_t, Simulation>& getPending() const {return pending;}
+    [[nodiscard]] const std::vector<Simulation>& getErrors() const {return errors;}
+    [[nodiscard]] int get_max_number_threads() const {return max_number_threads;}
+    [[nodiscard]] int get_next_priority() const {return next_id;}
 
     void save() const;
     void load();
@@ -39,6 +44,7 @@ private:
     std::map<int32_t, Simulation> pending{};
     std::vector<Simulation> running{};
     std::vector<Simulation> completed{};
+    std::vector<Simulation> errors{};   // simulations lancees dont le PID n'a pas ete retrouve
 };
 
 
