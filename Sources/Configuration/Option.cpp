@@ -13,7 +13,7 @@ int Option::Management(char **argv, const int argc) noexcept {
 			switch(argv[i][1]){
 				case 'h':
 					if(!strcmp(argv[i], "-help")){
-						printf("SandPandaSchedule\nOptions are :\n");
+						printf("SandPandaSchedule 1.2\nOptions are :\n");
 						printf("\t-add allow to add a pending simulation\n");
 						printf("\t-schedule start analyse of running simulations and start new one if resources are available\n");
 						printf("\t-clean remove terminated simulations and simulations in error from history\n");
@@ -26,7 +26,7 @@ int Option::Management(char **argv, const int argc) noexcept {
 						return 0;
 					}
 					if(!strcmp(argv[i], "-h")){
-						printf("SandPandaSchedule\nOptions are :\n");
+						printf("SandPandaSchedule 1.2\nOptions are :\n");
 						printf("\t-add allow to add a pending simulation\n");
 						printf("\t-schedule start analyse of running simulations and start new one if resources are available\n");
 						printf("\t-clean remove terminated simulations and simulations in error from history\n");
